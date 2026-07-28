@@ -215,31 +215,74 @@ const App = (() => {
   }
 
   // --- LocalStorage Persistence ---
+  // localStorage 只存元数据（不含大文件 base64），大文件由 IndexedDB 管理
   function saveToLocalStorage() {
     try {
       const stripped = JSON.parse(JSON.stringify(data));
-      // localStorage 不存 PDF/视频 data，由 IndexedDB 管理
       stripped.projects.forEach(p => {
-        if (p.images) p.images = p.images.map(img => {
+        if (p.images) p.images = p.images.map((img, i) => {
           if (img && typeof img === 'object' && img.type === 'pdf') {
             return { type: 'pdf', data: '', thumbnail: img.thumbnail };
           }
           if (img && typeof img === 'object' && img.type === 'video') {
             return { type: 'video', data: '', thumbnail: img.thumbnail, mimeType: img.mimeType, name: img.name };
           }
+          // 普通图片 base64 也存到 IndexedDB，localStorage 只留缩略图或标记
+          if (img && typeof img === 'string' && img.length > 100000) {
+            // 大图片：存入 IndexedDB，localStorage 留空标记
+            if (img.startsWith('data:')) {
+              return `__IDB_IMG__${p.id}_${i}__`;
+            }
+          }
           return img;
         });
       });
       localStorage.setItem('resume_data_draft', JSON.stringify(stripped));
-    } catch (e) { /* quota exceeded, silently ignore */ }
+    } catch (e) {
+      console.warn('localStorage save failed:', e);
+      // quota exceeded — 清除 localStorage 中的图片数据重试
+      try {
+        const lite = JSON.parse(JSON.stringify(data));
+        lite.projects.forEach(p => {
+          if (p.images) p.images = p.images.map((img, i) => {
+            if (img && typeof img === 'object' && (img.type === 'pdf' || img.type === 'video')) {
+              return { type: img.type, data: '', thumbnail: img.thumbnail };
+            }
+            if (img && typeof img === 'string' && img.startsWith('data:')) {
+              return `__IDB_IMG__${p.id}_${i}__`;
+            }
+            return img;
+          });
+        });
+        localStorage.setItem('resume_data_draft', JSON.stringify(lite));
+      } catch (e2) {
+        // 连轻量数据都存不下，放弃
+      }
+    }
   }
 
   function loadFromLocalStorage() {
-    try {
-      const saved = localStorage.getItem('resume_data_draft');
-      if (saved) return JSON.parse(saved);
-    } catch (e) { /* ignore */ }
-    return null;
+    return new Promise(async (resolve) => {
+      try {
+        const saved = localStorage.getItem('resume_data_draft');
+        if (!saved) { resolve(null); return; }
+        const draft = JSON.parse(saved);
+        // 恢复 IndexedDB 中存储的图片
+        for (const p of draft.projects || []) {
+          if (!p.images) continue;
+          for (let i = 0; i < p.images.length; i++) {
+            const img = p.images[i];
+            if (typeof img === 'string' && img.startsWith('__IDB_IMG__')) {
+              const mediaData = await loadPdfFromIdb(p.id, i);
+              p.images[i] = mediaData || '';
+            }
+          }
+        }
+        resolve(draft);
+      } catch (e) {
+        resolve(null);
+      }
+    });
   }
 
   // --- Render Functions ---
@@ -929,6 +972,13 @@ const App = (() => {
             }
           }
           saveToLocalStorage();
+          // 大图片也存入 IndexedDB
+          for (let j = 0; j < p.images.length; j++) {
+            const img = p.images[j];
+            if (typeof img === 'string' && img.startsWith('data:') && img.length > 100000) {
+              await savePdfToIdb(p.id, j, img);
+            }
+          }
           renderProjects();
           toast(`${files.length} 个文件已添加`);
         },
@@ -1164,12 +1214,13 @@ const App = (() => {
     delete clean.workMap;
     delete clean.eduMap;
 
-    // 从 IndexedDB 补充 PDF/视频数据到导出
+    // 从 IndexedDB 补充 PDF/视频/大图片数据到导出
     for (const p of clean.projects) {
       if (!p.images) continue;
       const origProject = data.projects.find(op => op.id === p.id);
       for (let i = 0; i < p.images.length; i++) {
-        if (isMediaItem(p.images[i]) && (!p.images[i].data || p.images[i].data.length <= 10)) {
+        const img = p.images[i];
+        if (isMediaItem(img) && (!img.data || img.data.length <= 10)) {
           // 先尝试从内存取
           if (origProject && origProject.images && origProject.images[i] && isMediaItem(origProject.images[i]) && origProject.images[i].data) {
             p.images[i].data = origProject.images[i].data;
@@ -1177,6 +1228,15 @@ const App = (() => {
             // 从 IndexedDB 取
             const mediaData = await loadPdfFromIdb(p.id, i);
             if (mediaData) p.images[i].data = mediaData;
+          }
+        }
+        // 恢复 IndexedDB 中存的大图片
+        if (typeof img === 'string' && img.startsWith('__IDB_IMG__')) {
+          if (origProject && origProject.images && origProject.images[i] && typeof origProject.images[i] === 'string' && !origProject.images[i].startsWith('__IDB_IMG__')) {
+            p.images[i] = origProject.images[i];
+          } else {
+            const mediaData = await loadPdfFromIdb(p.id, i);
+            if (mediaData) p.images[i] = mediaData;
           }
         }
       }
@@ -1435,12 +1495,22 @@ window.resumeData = ${JSON.stringify(clean, null, 2)};
   }
 
   // --- Init ---
-  function init() {
+  async function init() {
     const originalData = JSON.parse(JSON.stringify(window.resumeData));
-    const draft = loadFromLocalStorage();
+    const draft = await loadFromLocalStorage();
     if (draft) {
-      // 草稿存在，恢复但用原始数据补充 PDF 二进制
+      // 草稿存在，恢复但用原始数据补充 PDF/视频二进制
       _mergePdfData(draft, originalData);
+      // 同时恢复草稿中的大图片从 IndexedDB
+      for (const p of (draft.projects || [])) {
+        if (!p.images) continue;
+        for (let i = 0; i < p.images.length; i++) {
+          if (typeof p.images[i] === 'string' && p.images[i].startsWith('__IDB_IMG__')) {
+            const mediaData = await loadPdfFromIdb(p.id, i);
+            if (mediaData) p.images[i] = mediaData;
+          }
+        }
+      }
       data = draft;
     } else {
       data = originalData;
