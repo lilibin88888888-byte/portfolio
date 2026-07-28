@@ -863,6 +863,34 @@ const App = (() => {
     toast('技能已添加');
   }
 
+  // --- Custom Confirm Dialog ---
+  function showConfirm(message, title = '确认操作') {
+    return new Promise((resolve) => {
+      const dialog = $('#confirm-dialog');
+      const msgEl = $('#confirm-message');
+      const titleEl = dialog.querySelector('.confirm-title');
+      const okBtn = $('#confirm-ok');
+      const cancelBtn = $('#confirm-cancel');
+
+      titleEl.textContent = title;
+      msgEl.textContent = message;
+      dialog.style.display = 'flex';
+
+      function cleanup() {
+        dialog.style.display = 'none';
+        okBtn.replaceWith(okBtn.cloneNode(true));
+        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+      }
+
+      // 重新获取按钮引用（clone 后需要重新绑定）
+      const newOk = dialog.querySelector('#confirm-ok');
+      const newCancel = dialog.querySelector('#confirm-cancel');
+
+      newCancel.onclick = () => { cleanup(); resolve(false); };
+      newOk.onclick = () => { cleanup(); resolve(true); };
+    });
+  }
+
   // --- Work Experience CRUD ---
   function addWork() {
     const item = { id: uid(), company: '新公司', position: '职位', period: '2020.01 - 至今', content: '工作内容...', achievement: '主要业绩...' };
@@ -896,8 +924,9 @@ const App = (() => {
     });
   }
 
-  function deleteWork(id) {
-    if (!confirm('确定删除这条工作经历吗？')) return;
+  async function deleteWork(id) {
+    const ok = await showConfirm('确定删除这条工作经历吗？此操作不可撤销。', '删除工作经历');
+    if (!ok) return;
     data.workExperience = data.workExperience.filter(x => x.id !== id);
     saveToLocalStorage();
     renderWork();
@@ -1019,8 +1048,18 @@ const App = (() => {
     });
   }
 
-  function deleteProject(id) {
-    if (!confirm('确定删除这个项目吗？')) return;
+  async function deleteProject(id) {
+    const p = data.projects.find(x => x.id === id);
+    const name = p ? p.name : '此项目';
+    const ok = await showConfirm(`确定删除「${name}」吗？该项目的所有图片数据将被永久删除，此操作不可撤销。`, '删除项目');
+    if (!ok) return;
+    // 清理 IndexedDB 中的媒体数据
+    if (p && p.images) {
+      for (let i = 0; i < p.images.length; i++) {
+        if (isMediaItem(p.images[i])) await deletePdfFromIdb(p.id, i);
+        if (typeof p.images[i] === 'string' && p.images[i].startsWith('data:')) await deletePdfFromIdb(p.id, i);
+      }
+    }
     data.projects = data.projects.filter(x => x.id !== id);
     saveToLocalStorage();
     renderProjects();
@@ -1069,8 +1108,9 @@ const App = (() => {
     });
   }
 
-  function deleteEducation(id) {
-    if (!confirm('确定删除这条教育经历吗？')) return;
+  async function deleteEducation(id) {
+    const ok = await showConfirm('确定删除这条教育经历吗？此操作不可撤销。', '删除教育经历');
+    if (!ok) return;
     data.education = data.education.filter(x => x.id !== id);
     saveToLocalStorage();
     renderEducation();

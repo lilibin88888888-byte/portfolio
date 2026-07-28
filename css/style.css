@@ -600,6 +600,27 @@ body.edit-mode .edit-panel { display: block; }
 }
 .password-modal .form-input { margin-top: 8px; }
 
+/* === CONFIRM DIALOG === */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 5000;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-box {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius); padding: 32px;
+  width: 360px; text-align: center; animation: modalIn 0.3s ease;
+}
+.confirm-icon {
+  width: 56px; height: 56px; margin: 0 auto 20px;
+  border-radius: 50%; background: rgba(255,71,87,0.1);
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm-icon svg { width: 28px; height: 28px; color: var(--color-danger); }
+.confirm-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+.confirm-message { font-size: 0.88rem; color: var(--color-text-secondary); margin-bottom: 24px; line-height: 1.6; }
+.confirm-actions { display: flex; gap: 12px; justify-content: center; }
+
 /* === TOAST === */
 .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 4000; display: flex; flex-direction: column; gap: 8px; }
 .toast {
