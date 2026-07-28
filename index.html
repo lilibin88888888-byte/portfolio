@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>李丽斌 - UI/UX 设计师作品集</title>
+  <meta name="description" content="李丽斌 - 10年 UI/UX 设计经验，擅长 APP、网站全链路设计。作品涵盖教育数字化、农业数字化、智慧交通、党建服务等领域。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+</head>
+<body>
+
+  <!-- Full-page visual enhancements -->
+  <div class="noise-overlay"></div>
+  <div class="bg-blob-3"></div>
+
+  <!-- Navigation -->
+  <nav class="nav" id="nav">
+    <div class="nav-brand">LIBIN<span>.</span>DESIGN</div>
+    <ul class="nav-links">
+      <li><a href="#about" data-nav>关于我</a></li>
+      <li><a href="#experience" data-nav>工作经历</a></li>
+      <li><a href="#projects" data-nav>项目作品</a></li>
+      <li><a href="#education" data-nav>教育背景</a></li>
+    </ul>
+    <div class="nav-actions">
+      <button class="btn btn-outline btn-sm" id="toggle-edit">编辑模式</button>
+    </div>
+  </nav>
+
+  <!-- Edit Mode Banner -->
+  <div class="edit-banner" id="edit-banner">
+    <span>编辑模式已开启 — 点击虚线区域可直接编辑文字，使用操作按钮管理内容</span>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;" onclick="App.exportData()">导出数据</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;" onclick="App.importData()">导入数据</button>
+      <button class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:#fff;" onclick="App.toggleEdit()">退出编辑</button>
+    </div>
+  </div>
+
+  <!-- Hero Section -->
+  <section class="hero" id="about">
+    <div class="hero-bg"></div>
+    <div class="hero-grid"></div>
+    <div class="hero-noise"></div>
+    <div class="hero-content fade-in">
+      <div class="hero-greeting editable" data-editable="profile.greeting" data-default="HELLO, I'M">HELLO, I'M</div>
+      <h1 class="hero-name editable" data-editable="profile.name">李丽斌</h1>
+      <div class="hero-title editable" data-editable="profile.title">UX/交互设计师</div>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+          <span class="editable" data-editable="profile.phone">15708464600</span>
+        </div>
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          <span class="editable" data-editable="profile.email">15708464600@163.com</span>
+        </div>
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <span class="editable" data-editable="profile.expectedCity">成都</span>
+        </div>
+        <div class="hero-meta-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+          <span class="editable" data-editable="profile.experience">10年工作经验</span>
+        </div>
+      </div>
+      <div class="hero-cta">
+        <a href="#projects" class="btn btn-primary">查看作品集</a>
+        <a href="#experience" class="btn btn-outline">工作经历</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- About Section -->
+  <section class="section fade-in" id="about-detail">
+    <div class="section-label">关于我</div>
+    <h2 class="section-title">个人优势</h2>
+    <div class="editable" data-editable="profile.advantage" style="color:var(--color-text-secondary);line-height:1.9;max-width:800px;"></div>
+
+    <!-- Skills -->
+    <div style="margin-top:80px;">
+      <div class="section-label">技能</div>
+      <div class="skills-grid" id="skills-container"></div>
+      <div class="edit-panel" id="skills-edit-panel">
+        <div class="form-group">
+          <label class="form-label">技能标签（输入后按回车添加）</label>
+          <div class="tag-editor" id="skills-editor"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Work Experience -->
+  <section class="section fade-in" id="experience">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div class="section-label">经历</div>
+        <h2 class="section-title">工作经历</h2>
+      </div>
+      <div class="edit-panel" style="display:none;margin:0;">
+        <button class="btn btn-primary btn-sm" onclick="App.addWork()">+ 添加工作经历</button>
+      </div>
+    </div>
+    <div class="timeline" id="work-container" style="margin-top:56px;"></div>
+  </section>
+
+  <!-- Projects -->
+  <section class="section fade-in" id="projects">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div class="section-label">作品</div>
+        <h2 class="section-title">项目作品</h2>
+      </div>
+      <div class="edit-panel" style="display:none;margin:0;">
+        <button class="btn btn-primary btn-sm" onclick="App.addProject()">+ 添加项目</button>
+      </div>
+    </div>
+    <div class="project-filters" id="project-filters"></div>
+    <div class="projects-grid" id="projects-container"></div>
+  </section>
+
+  <!-- Education -->
+  <section class="section fade-in" id="education">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+      <div>
+        <div class="section-label">学历</div>
+        <h2 class="section-title">教育背景</h2>
+      </div>
+      <div class="edit-panel" style="display:none;margin:0;">
+        <button class="btn btn-primary btn-sm" onclick="App.addEducation()">+ 添加教育经历</button>
+      </div>
+    </div>
+    <div id="education-container" style="margin-top:56px;"></div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p data-editable="footer.text" data-default="© 2026 李丽斌 — UI/UX Designer Portfolio">© 2026 李丽斌 — UI/UX Designer Portfolio</p>
+  </footer>
+
+  <!-- Project Detail Modal -->
+  <div class="modal-overlay" id="project-modal">
+    <div class="modal" id="modal-content"></div>
+  </div>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox">
+    <div class="lightbox-arrow lightbox-prev" onclick="event.stopPropagation();App.lightboxPrev()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    </div>
+    <div class="lightbox-img-wrap" id="lightbox-img-wrap">
+      <img id="lightbox-img" src="" alt="">
+    </div>
+    <div class="lightbox-arrow lightbox-next" onclick="event.stopPropagation();App.lightboxNext()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="lightbox-counter"></div>
+    <div class="lightbox-hint">点击空白处或按 ESC 关闭 · 方向键切换 · 滚轮/双指缩放</div>
+    <div class="lightbox-zoom-controls">
+      <button class="lightbox-zoom-btn" onclick="event.stopPropagation();App.lightboxZoomIn()" title="放大">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="lightbox-zoom-btn" onclick="event.stopPropagation();App.lightboxZoomOut()" title="缩小">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+      </button>
+      <button class="lightbox-zoom-btn" onclick="event.stopPropagation();App.lightboxZoomReset()" title="重置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Password Modal -->
+  <div class="password-modal-overlay" id="password-modal" style="display:none;">
+    <div class="password-modal">
+      <div class="password-modal-title">请输入编辑密码</div>
+      <input class="form-input" type="password" id="password-input" placeholder="输入密码后点击确认">
+      <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
+        <button class="btn btn-outline btn-sm" onclick="App.cancelPassword()">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="App.confirmPassword()">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Hidden File Inputs -->
+  <input type="file" id="import-input" class="hidden-input" accept=".js">
+  <input type="file" id="image-input" class="hidden-input" accept="image/*,.pdf,video/*" multiple>
+
+  <script src="data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
