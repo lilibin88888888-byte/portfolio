@@ -369,10 +369,10 @@ body.edit-mode .editable:focus { outline-color: var(--color-accent); outline-sty
 .modal-section-title { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-accent); margin-bottom: 14px; }
 .modal-section p { color: var(--color-text-secondary); line-height: 1.8; }
 .modal-gallery {
-  columns: 3; column-gap: 8px;
+  columns: 2; column-gap: 12px;
 }
 .modal-gallery-item {
-  break-inside: avoid; margin-bottom: 8px;
+  break-inside: avoid; margin-bottom: 12px;
   border-radius: var(--radius-sm); overflow: hidden;
   background: var(--color-surface-2); position: relative;
   cursor: pointer; transition: all var(--transition);
@@ -644,6 +644,8 @@ body.edit-mode .edit-panel { display: block; }
   .modal-header { padding: 24px 20px 0; }
   .modal-body { padding: 16px 20px 24px; }
   .modal-overlay { padding: 80px 16px 16px; }
+  .modal-gallery { columns: 1; column-gap: 8px; }
+  .modal-gallery-item { margin-bottom: 8px; }
   .form-row { grid-template-columns: 1fr; }
   .edit-banner { padding: 10px 20px; }
   .education-card { flex-direction: column; text-align: center; padding: 32px; }
