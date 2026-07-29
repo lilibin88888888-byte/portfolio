@@ -9,8 +9,10 @@ const App = (() => {
   let editMode = false;
   let activeFilter = 'all';
   let imageUploadTarget = null; // { type: 'project', id: 'proj-x' }
+  let imageUploadPosition = 'end'; // 'start' or 'end' — 新上传图片的插入位置
   let lightboxImages = []; // current gallery images
   let lightboxIndex = 0;  // current image index in gallery
+  let dragSrcIndex = null; // 拖拽排序的起始索引
   let lbScale = 1, lbX = 0, lbY = 0; // zoom & pan state
   let lbDragging = false, lbDragStartX = 0, lbDragStartY = 0, lbStartX = 0, lbStartY = 0;
   let lbPinchStartDist = 0, lbPinchStartScale = 1;
@@ -97,7 +99,7 @@ const App = (() => {
   }
 
   function renderEditImageThumb(img, i) {
-    return `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}"><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}${getItemSizeLabel(img)}<button class="remove-img" onclick="App._removeEditImage(${i})">×</button></div>`;
+    return `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}" draggable="true" data-index="${i}" ondragstart="App._onImgDragStart(event,${i})" ondragover="App._onImgDragOver(event,${i})" ondrop="App._onImgDrop(event,${i})" ondragend="App._onImgDragEnd(event)" ondragleave="App._onImgDragLeave(event,${i})"><div class="drag-handle">⠿</div><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}<div class="image-order-label">${i + 1}</div>${getItemSizeLabel(img)}<button class="remove-img" onclick="event.stopPropagation();App._removeEditImage(${i})">×</button></div>`;
   }
 
   function getBase64Size(dataUrl) {
@@ -1017,29 +1019,65 @@ const App = (() => {
       ],
       imageSection: {
         images: p.images || [],
+        projectId: p.id,
         onUpload: async (files) => {
+          const insertAtStart = imageUploadPosition === 'start';
+          const newItems = [];
           for (const file of files) {
             const result = await compressImage(file);
-            const idx = p.images.length;
-            p.images.push(result);
-            // PDF/视频存入 IndexedDB
-            if (isPdfItem(result) && result.data) {
-              await savePdfToIdb(p.id, idx, result.data);
+            newItems.push(result);
+          }
+          if (insertAtStart) {
+            // 先把现有图片往后移，为新图片腾出位置
+            const offset = newItems.length;
+            // 从后往前移，避免覆盖
+            for (let i = p.images.length - 1; i >= 0; i--) {
+              if (isMediaItem(p.images[i])) {
+                const oldData = await loadPdfFromIdb(p.id, i);
+                if (oldData) {
+                  await savePdfToIdb(p.id, i + offset, oldData);
+                  await deletePdfFromIdb(p.id, i);
+                }
+              }
             }
-            if (isVideoItem(result) && result.data) {
-              await savePdfToIdb(p.id, idx, result.data);
+            // 在头部插入新图片
+            p.images.unshift(...newItems);
+            // 存入 IndexedDB
+            for (let i = 0; i < newItems.length; i++) {
+              const item = newItems[i];
+              if (isPdfItem(item) && item.data) {
+                await savePdfToIdb(p.id, i, item.data);
+              }
+              if (isVideoItem(item) && item.data) {
+                await savePdfToIdb(p.id, i, item.data);
+              }
+              if (typeof item === 'string' && item.startsWith('data:') && item.length > 100000) {
+                await savePdfToIdb(p.id, i, item);
+              }
+            }
+          } else {
+            // 追加到末尾
+            for (const result of newItems) {
+              const idx = p.images.length;
+              p.images.push(result);
+              if (isPdfItem(result) && result.data) {
+                await savePdfToIdb(p.id, idx, result.data);
+              }
+              if (isVideoItem(result) && result.data) {
+                await savePdfToIdb(p.id, idx, result.data);
+              }
+            }
+            // 大图片也存入 IndexedDB
+            for (let j = 0; j < p.images.length; j++) {
+              const img = p.images[j];
+              if (typeof img === 'string' && img.startsWith('data:') && img.length > 100000) {
+                await savePdfToIdb(p.id, j, img);
+              }
             }
           }
           saveToLocalStorage();
-          // 大图片也存入 IndexedDB
-          for (let j = 0; j < p.images.length; j++) {
-            const img = p.images[j];
-            if (typeof img === 'string' && img.startsWith('data:') && img.length > 100000) {
-              await savePdfToIdb(p.id, j, img);
-            }
-          }
           renderProjects();
-          toast(`${files.length} 个文件已添加`);
+          toast(`${files.length} 个文件已添加到${insertAtStart ? '最前' : '最后'}`);
         },
         onRemove: async (index) => {
           const removed = p.images[index];
@@ -1165,15 +1203,21 @@ const App = (() => {
     let imageHtml = '';
     if (imageSection) {
       const thumbs = imageSection.images.map((img, i) => renderEditImageThumb(img, i)).join('');
+      const imgCount = imageSection.images.length;
 
       imageHtml = `
         <div class="modal-section">
-          <div class="modal-section-title">项目图片</div>
+          <div class="modal-section-title">项目图片${imgCount ? `（${imgCount} 张，可拖拽排序）` : ''}</div>
+          <div class="upload-position-toggle">
+            <span class="upload-position-label">上传位置：</span>
+            <button class="upload-position-btn ${imageUploadPosition === 'start' ? 'active' : ''}" onclick="App._setUploadPosition('start')">添加到最前</button>
+            <button class="upload-position-btn ${imageUploadPosition === 'end' ? 'active' : ''}" onclick="App._setUploadPosition('end')">添加到最后</button>
+          </div>
           <div class="upload-zone" onclick="App._triggerImageUpload()">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <div>点击上传图片/PDF/视频（支持多选）</div>
           </div>
-          <div class="image-grid-edit" id="edit-image-grid">${thumbs}</div>
+          ${imgCount ? `<div class="image-grid-edit" id="edit-image-grid">${thumbs}</div>` : ''}
         </div>
       `;
       imageUploadTarget = imageSection;
@@ -1244,6 +1288,137 @@ const App = (() => {
         grid.innerHTML = imageUploadTarget.images.map((img, i) => renderEditImageThumb(img, i)).join('');
       }
     }
+  }
+
+  // --- 设置上传位置（最前/最后） ---
+  function _setUploadPosition(pos) {
+    imageUploadPosition = pos;
+    // 更新按钮状态
+    document.querySelectorAll('.upload-position-btn').forEach(btn => {
+      if (btn.textContent.includes(pos === 'start' ? '最前' : '最后')) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    toast(`新图片将添加到${pos === 'start' ? '最前' : '最后'}`);
+  }
+
+  // --- 拖拽排序：图片重排 ---
+  async function _reorderImages(fromIndex, toIndex) {
+    if (!imageUploadTarget || fromIndex === toIndex || fromIndex === null || toIndex === null) return;
+    const images = imageUploadTarget.images;
+    if (fromIndex < 0 || fromIndex >= images.length || toIndex < 0 || toIndex >= images.length) return;
+
+    // 获取项目 ID（用于 IndexedDB 重映射）
+    const projectId = imageUploadTarget.projectId;
+
+    // 先备份所有 IndexedDB 中的媒体数据
+    const idbBackup = {};
+    for (let i = 0; i < images.length; i++) {
+      if (isMediaItem(images[i]) || (typeof images[i] === 'string' && images[i].startsWith('__IDB_IMG__'))) {
+        const data = await loadPdfFromIdb(projectId, i);
+        if (data) idbBackup[i] = data;
+        await deletePdfFromIdb(projectId, i);
+      }
+    }
+
+    // 移动数组元素
+    const [moved] = images.splice(fromIndex, 1);
+    images.splice(toIndex, 0, moved);
+
+    // 重新存入 IndexedDB（按新顺序）
+    for (let i = 0; i < images.length; i++) {
+      // 原来在 fromIndex 的数据现在在 toIndex
+      // 其他元素的位置变化也需要映射
+      let oldIndex;
+      if (fromIndex < toIndex) {
+        // 向后拖：fromIndex 到 toIndex-1 的元素都往前移了一位
+        if (i === toIndex) {
+          oldIndex = fromIndex;
+        } else if (i >= fromIndex && i < toIndex) {
+          oldIndex = i + 1;
+        } else {
+          oldIndex = i;
+        }
+      } else {
+        // 向前拖：fromIndex 的元素移到 toIndex，toIndex 到 fromIndex-1 的元素往后移了一位
+        if (i === toIndex) {
+          oldIndex = fromIndex;
+        } else if (i > toIndex && i <= fromIndex) {
+          oldIndex = i - 1;
+        } else {
+          oldIndex = i;
+        }
+      }
+
+      if (idbBackup[oldIndex] !== undefined) {
+        await savePdfToIdb(projectId, i, idbBackup[oldIndex]);
+      }
+      // 大图片（__IDB_IMG__ 标记）也需要重新存
+      if (typeof images[i] === 'string' && images[i].startsWith('data:') && images[i].length > 100000) {
+        await savePdfToIdb(projectId, i, images[i]);
+      }
+    }
+
+    // 保存到 localStorage 并重新渲染
+    saveToLocalStorage();
+    renderProjects();
+
+    // 重新渲染编辑弹窗中的图片网格
+    const grid = $('#edit-image-grid');
+    if (grid) {
+      grid.innerHTML = images.map((img, i) => renderEditImageThumb(img, i)).join('');
+    }
+    toast('图片顺序已更新');
+  }
+
+  // --- 拖拽事件处理 ---
+  function _onImgDragStart(e, index) {
+    dragSrcIndex = index;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    e.target.closest('.image-grid-edit-item').classList.add('dragging');
+  }
+
+  function _onImgDragOver(e, index) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.target.closest('.image-grid-edit-item');
+    if (item && dragSrcIndex !== null && dragSrcIndex !== index) {
+      // 移除其他元素的 drop-target 类
+      document.querySelectorAll('.image-grid-edit-item.drop-target').forEach(el => {
+        if (el !== item) el.classList.remove('drop-target');
+      });
+      item.classList.add('drop-target');
+    }
+  }
+
+  function _onImgDragLeave(e, index) {
+    const item = e.target.closest('.image-grid-edit-item');
+    if (item) item.classList.remove('drop-target');
+  }
+
+  function _onImgDrop(e, toIndex) {
+    e.preventDefault();
+    e.stopPropagation();
+    const fromIndex = dragSrcIndex;
+    if (fromIndex === null || fromIndex === toIndex) return;
+
+    // 清理视觉状态
+    document.querySelectorAll('.image-grid-edit-item').forEach(el => {
+      el.classList.remove('dragging', 'drop-target');
+    });
+
+    _reorderImages(fromIndex, toIndex);
+    dragSrcIndex = null;
+  }
+
+  function _onImgDragEnd(e) {
+    dragSrcIndex = null;
+    document.querySelectorAll('.image-grid-edit-item').forEach(el => {
+      el.classList.remove('dragging', 'drop-target');
+    });
   }
 
   // --- Image Upload Handler ---
@@ -1899,5 +2074,6 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
     filterProjects, openLightbox, openProjectLightbox, openLightboxWithGallery, lightboxPrev, lightboxNext, closeLightbox, lightboxZoomIn, lightboxZoomOut, lightboxZoomReset, pdfPagePrev, pdfPageNext,
     openMediaManager, closeMediaManager, deleteTopMedia,
     _saveEditModal, _triggerImageUpload, _removeEditImage, _deleteMediaItem: deleteMediaItem,
+    _setUploadPosition, _onImgDragStart, _onImgDragOver, _onImgDragLeave, _onImgDrop, _onImgDragEnd,
   };
 })();
