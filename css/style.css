@@ -686,3 +686,65 @@ body.edit-mode .edit-panel { display: block; }
   .timeline { padding-left: 28px; }
   .timeline-dot { left: -28px; }
 }
+
+/* === PUBLISH PROGRESS OVERLAY === */
+.publish-overlay {
+  position: fixed; inset: 0; z-index: 6000;
+  background: rgba(5, 5, 8, 0.92); backdrop-filter: blur(16px);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+.publish-panel {
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: var(--radius); padding: 40px 48px;
+  width: min(440px, 90vw); text-align: center;
+  box-shadow: 0 24px 80px rgba(108, 99, 255, 0.18);
+  animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.publish-icon {
+  width: 64px; height: 64px; margin: 0 auto 20px;
+  border-radius: 50%; background: rgba(108, 99, 255, 0.12);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-accent); animation: pulseGlow 2s ease-in-out infinite;
+}
+.publish-icon svg { width: 32px; height: 32px; }
+.publish-title { font-size: 1.25rem; font-weight: 800; margin-bottom: 8px; }
+.publish-message { font-size: 0.9rem; color: var(--color-text-secondary); margin-bottom: 28px; min-height: 1.5em; }
+.publish-progress-wrap {
+  height: 8px; border-radius: 100px; background: var(--color-surface-2);
+  overflow: hidden; border: 1px solid var(--color-border);
+}
+.publish-progress-bar {
+  height: 100%; width: 0%; border-radius: 100px;
+  background: linear-gradient(90deg, var(--color-accent), var(--color-glow-2));
+  box-shadow: 0 0 20px rgba(108, 99, 255, 0.4);
+  transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.publish-percent {
+  margin-top: 12px; font-size: 0.85rem; font-weight: 700;
+  color: var(--color-accent-light); font-family: var(--font-mono);
+}
+.publish-panel.success .publish-progress-bar { background: linear-gradient(90deg, var(--color-success), #7bed9f); }
+.publish-panel.error .publish-progress-bar { background: linear-gradient(90deg, var(--color-danger), #ff6b81); }
+.publish-panel.success .publish-icon { color: var(--color-success); background: rgba(46, 213, 115, 0.12); animation: none; }
+.publish-panel.error .publish-icon { color: var(--color-danger); background: rgba(255, 71, 87, 0.12); animation: none; }
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.25); }
+  50% { box-shadow: 0 0 0 12px rgba(108, 99, 255, 0); }
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (max-width: 480px) {
+  .publish-panel { padding: 32px 24px; }
+  .publish-icon { width: 56px; height: 56px; }
+  .publish-icon svg { width: 28px; height: 28px; }
+  .publish-title { font-size: 1.1rem; }
+}

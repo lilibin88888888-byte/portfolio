@@ -1246,15 +1246,15 @@ const App = (() => {
     renderProjects();
   }
 
-  // --- Export / Import ---
-  async function exportData() {
-    toast('正在导出，含 PDF 文件可能需要几秒...');
-    // Remove internal helper maps before export
+  // --- Export / Import / Publish ---
+
+  // 准备完整数据（含从 IndexedDB 恢复 PDF/视频/大图片），用于导出或发布
+  async function prepareFullData() {
     const clean = JSON.parse(JSON.stringify(data));
     delete clean.workMap;
     delete clean.eduMap;
 
-    // 从 IndexedDB 补充 PDF/视频/大图片数据到导出
+    // 从 IndexedDB 补充 PDF/视频/大图片数据
     for (const p of clean.projects) {
       if (!p.images) continue;
       const origProject = data.projects.find(op => op.id === p.id);
@@ -1284,19 +1284,27 @@ const App = (() => {
 
     // Update timestamp
     clean.meta.lastUpdated = new Date().toISOString().split('T')[0];
+    return clean;
+  }
 
-    const content = `/**
+  function generateDataJsContent(fullData) {
+    return `/**
  * resumeData — 个人简历网站数据文件
  *
  * 修改方式：
- *   1. 推荐：在网页上点击「编辑模式」按钮，直接增删改查所有内容，改完点「导出数据」，
- *      用导出的 data.js 覆盖本文件，push 到 GitHub 即可生效。
+ *   1. 推荐：在网页上点击「编辑模式」按钮，直接增删改查所有内容，改完点「发布到 GitHub」。
  *   2. 手动：直接编辑本文件的 JSON 内容。
  *
  * 所有图片以 base64 字符串存储在 images 数组中，方便单文件部署。
  */
-window.resumeData = ${JSON.stringify(clean, null, 2)};
+window.resumeData = ${JSON.stringify(fullData, null, 2)};
 `;
+  }
+
+  async function exportData() {
+    toast('正在导出，含 PDF 文件可能需要几秒...');
+    const clean = await prepareFullData();
+    const content = generateDataJsContent(clean);
 
     const blob = new Blob([content], { type: 'application/javascript' });
     const url = URL.createObjectURL(blob);
@@ -1306,6 +1314,99 @@ window.resumeData = ${JSON.stringify(clean, null, 2)};
     a.click();
     URL.revokeObjectURL(url);
     toast('数据已导出为 data.js，请用此文件替换仓库中的 data.js 后 push 到 GitHub');
+  }
+
+  // --- Publish Progress UI ---
+  function updatePublishProgress(progress, message) {
+    const bar = $('#publish-progress-bar');
+    const msg = $('#publish-message');
+    const pct = $('#publish-percent');
+    if (bar) bar.style.width = progress + '%';
+    if (msg) msg.textContent = message;
+    if (pct) pct.textContent = progress + '%';
+  }
+
+  function showPublishOverlay() {
+    const overlay = $('#publish-overlay');
+    const panel = overlay.querySelector('.publish-panel');
+    const closeBtn = $('#publish-close');
+    panel.classList.remove('success', 'error');
+    closeBtn.style.display = 'none';
+    updatePublishProgress(0, '准备数据...');
+    overlay.style.display = 'flex';
+  }
+
+  function closePublishOverlay() {
+    $('#publish-overlay').style.display = 'none';
+  }
+
+  async function publishToGitHub() {
+    if (!editMode) {
+      toast('请先进入编辑模式再发布', 'error');
+      return;
+    }
+
+    showPublishOverlay();
+
+    try {
+      updatePublishProgress(5, '正在收集数据（含图片/PDF/视频）...');
+      const fullData = await prepareFullData();
+
+      updatePublishProgress(10, '正在生成 data.js...');
+      const content = generateDataJsContent(fullData);
+
+      updatePublishProgress(15, '正在连接本地发布服务...');
+      const response = await fetch('http://127.0.0.1:9999/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+
+      if (!response.ok) {
+        throw new Error('发布服务返回错误：' + response.status);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // 保留未完整行
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            updatePublishProgress(event.progress, event.message);
+            if (event.done) {
+              const panel = $('#publish-overlay').querySelector('.publish-panel');
+              const closeBtn = $('#publish-close');
+              if (event.success) {
+                panel.classList.add('success');
+                toast(event.message, 'success');
+              } else {
+                panel.classList.add('error');
+                toast(event.error || event.message, 'error');
+              }
+              closeBtn.style.display = 'inline-flex';
+              return;
+            }
+          } catch (e) {
+            console.warn('解析进度消息失败:', line, e);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('发布失败:', err);
+      updatePublishProgress(100, '发布失败：' + err.message);
+      const panel = $('#publish-overlay').querySelector('.publish-panel');
+      panel.classList.add('error');
+      $('#publish-close').style.display = 'inline-flex';
+      toast('发布失败：' + err.message, 'error');
+    }
   }
 
   function importData() {
@@ -1583,7 +1684,7 @@ window.resumeData = ${JSON.stringify(clean, null, 2)};
 
   // --- Public API ---
   return {
-    toggleEdit, confirmPassword, cancelPassword, exportData, importData,
+    toggleEdit, confirmPassword, cancelPassword, exportData, importData, publishToGitHub, closePublishOverlay,
     removeSkill, handleSkillInput,
     addWork, editWork, deleteWork,
     addProject, editProject, deleteProject, viewProject, closeModal,
