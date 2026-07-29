@@ -44,7 +44,7 @@ const App = (() => {
   }
 
   // --- Image Compression ---
-  // 读取图片或PDF文件，返回 data URL 或 PDF 标记对象
+  // 读取图片或PDF文件，返回 data URL 或 PDF 标记对象（图片保持原图）
   function compressImage(file) {
     return new Promise((resolve) => {
       if (file.type === 'application/pdf') {
@@ -94,6 +94,36 @@ const App = (() => {
 
   function isMediaItem(img) {
     return isPdfItem(img) || isVideoItem(img);
+  }
+
+  function renderEditImageThumb(img, i) {
+    return `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}"><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}${getItemSizeLabel(img)}<button class="remove-img" onclick="App._removeEditImage(${i})">×</button></div>`;
+  }
+
+  function getBase64Size(dataUrl) {
+    if (!dataUrl || typeof dataUrl !== 'string') return 0;
+    const base64 = dataUrl.split(',')[1] || '';
+    return Math.round(base64.length * 0.75);
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function getItemSize(img) {
+    if (isPdfItem(img) || isVideoItem(img)) {
+      return getBase64Size(img.data) || getBase64Size(img.thumbnail);
+    }
+    if (typeof img === 'string') return getBase64Size(img);
+    return 0;
+  }
+
+  function getItemSizeLabel(img) {
+    const size = getItemSize(img);
+    if (!size) return '';
+    return `<div class="image-size-label">${formatFileSize(size)}</div>`;
   }
 
   // 生成视频缩略图
@@ -1134,9 +1164,7 @@ const App = (() => {
 
     let imageHtml = '';
     if (imageSection) {
-      const thumbs = imageSection.images.map((img, i) =>
-        `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}"><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}<button class="remove-img" onclick="App._removeEditImage(${i})">×</button></div>`
-      ).join('');
+      const thumbs = imageSection.images.map((img, i) => renderEditImageThumb(img, i)).join('');
 
       imageHtml = `
         <div class="modal-section">
@@ -1213,10 +1241,7 @@ const App = (() => {
       // Re-render the image grid in the modal
       const grid = $('#edit-image-grid');
       if (grid) {
-        const thumbs = imageUploadTarget.images.map((img, i) =>
-          `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}"><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}<button class="remove-img" onclick="App._removeEditImage(${i})">×</button></div>`
-        ).join('');
-        grid.innerHTML = thumbs;
+        grid.innerHTML = imageUploadTarget.images.map((img, i) => renderEditImageThumb(img, i)).join('');
       }
     }
   }
@@ -1230,10 +1255,7 @@ const App = (() => {
       // Re-render image grid in modal
       const grid = $('#edit-image-grid');
       if (grid) {
-        const thumbs = imageUploadTarget.images.map((img, i) =>
-          `<div class="image-grid-edit-item ${isMediaItem(img) ? img.type + '-item' : ''}"><img src="${getImgSrc(img)}" alt="">${isPdfItem(img) ? '<div class="pdf-badge">PDF</div>' : ''}${isVideoItem(img) ? '<div class="video-badge">VIDEO</div>' : ''}<button class="remove-img" onclick="App._removeEditImage(${i})">×</button></div>`
-        ).join('');
-        grid.innerHTML = thumbs;
+        grid.innerHTML = imageUploadTarget.images.map((img, i) => renderEditImageThumb(img, i)).join('');
       }
       e.target.value = ''; // Reset
     });
@@ -1326,10 +1348,12 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
     if (pct) pct.textContent = progress + '%';
   }
 
-  function showPublishOverlay() {
+  function showPublishOverlay(title = '正在发布到 GitHub') {
     const overlay = $('#publish-overlay');
     const panel = overlay.querySelector('.publish-panel');
+    const titleEl = $('#publish-title');
     const closeBtn = $('#publish-close');
+    if (titleEl) titleEl.textContent = title;
     panel.classList.remove('success', 'error');
     closeBtn.style.display = 'none';
     updatePublishProgress(0, '准备数据...');
@@ -1338,6 +1362,162 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
 
   function closePublishOverlay() {
     $('#publish-overlay').style.display = 'none';
+    const manageBtn = $('#publish-manage-media');
+    if (manageBtn) manageBtn.style.display = 'none';
+  }
+
+  // --- Media Manager ---
+  function getAllMediaItems() {
+    const items = [];
+    for (const p of data.projects || []) {
+      if (!p.images) continue;
+      for (let i = 0; i < p.images.length; i++) {
+        const img = p.images[i];
+        const size = getItemSize(img);
+        let type = 'image';
+        if (isPdfItem(img)) type = 'pdf';
+        if (isVideoItem(img)) type = 'video';
+        items.push({
+          projectId: p.id,
+          projectName: p.name,
+          index: i,
+          type,
+          size,
+          img,
+        });
+      }
+    }
+    items.sort((a, b) => b.size - a.size);
+    return items;
+  }
+
+  async function deleteMediaItem(projectId, index) {
+    const p = data.projects.find(x => x.id === projectId);
+    if (!p || !p.images || index < 0 || index >= p.images.length) return;
+    const removed = p.images[index];
+    // 清理 IndexedDB
+    if (isMediaItem(removed) || (typeof removed === 'string' && removed.startsWith('data:'))) {
+      await deletePdfFromIdb(p.id, index);
+    }
+    p.images.splice(index, 1);
+    // 重新映射后续媒体的 IndexedDB key
+    for (let i = index; i < p.images.length; i++) {
+      if (isMediaItem(p.images[i]) || (typeof p.images[i] === 'string' && p.images[i].startsWith('data:'))) {
+        const oldData = await loadPdfFromIdb(p.id, i + 1);
+        if (oldData) {
+          await savePdfToIdb(p.id, i, oldData);
+          await deletePdfFromIdb(p.id, i + 1);
+        }
+      }
+    }
+    saveToLocalStorage();
+    renderProjects();
+    renderMediaManager();
+    toast('媒体文件已删除');
+  }
+
+  async function deleteTopMedia() {
+    const countStr = prompt('要删除前几个最大的文件？\n当前排序已按文件大小从大到小排列，\n建议先删除最大的 1-3 个文件即可低于 100MB 限制。', '1');
+    if (!countStr) return;
+    const count = parseInt(countStr, 10);
+    if (!count || count < 1) return;
+    const items = getAllMediaItems();
+    if (count > items.length) {
+      toast(`最多只有 ${items.length} 个媒体文件`, 'error');
+      return;
+    }
+    const ok = await showConfirm(`确定删除前 ${count} 个最大的媒体文件吗？\n\n${items.slice(0, count).map((m, i) => `${i + 1}. ${m.projectName} [${m.type}] ${formatFileSize(m.size)}`).join('\n')}\n\n此操作不可撤销。`, '批量删除媒体');
+    if (!ok) return;
+    // 从后往前删除，避免索引变化影响
+    const toDelete = items.slice(0, count).sort((a, b) => b.index - a.index);
+    for (const item of toDelete) {
+      await deleteMediaItem(item.projectId, item.index);
+    }
+    toast(`已删除 ${count} 个媒体文件`);
+  }
+
+  function openMediaManager() {
+    if (!editMode) {
+      toast('请先进入编辑模式', 'error');
+      return;
+    }
+    renderMediaManager();
+    $('#media-manager-modal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeMediaManager() {
+    $('#media-manager-modal').classList.remove('active');
+    document.body.style.overflow = '';
+  }
+
+  function renderMediaManager() {
+    const items = getAllMediaItems();
+    const totalSize = items.reduce((sum, m) => sum + m.size, 0);
+    const dataJsSize = estimateDataSize();
+    const overLimit = dataJsSize > 100 * 1024 * 1024;
+
+    $('#media-manager-stats').innerHTML = `
+      <div class="media-manager-stat">
+        <span class="media-manager-stat-label">媒体文件数</span>
+        <span class="media-manager-stat-value">${items.length}</span>
+      </div>
+      <div class="media-manager-stat">
+        <span class="media-manager-stat-label">媒体总大小</span>
+        <span class="media-manager-stat-value ${totalSize > 80 * 1024 * 1024 ? 'warning' : ''} ${totalSize > 100 * 1024 * 1024 ? 'danger' : ''}">${formatFileSize(totalSize)}</span>
+      </div>
+      <div class="media-manager-stat">
+        <span class="media-manager-stat-label">data.js 估算大小</span>
+        <span class="media-manager-stat-value ${overLimit ? 'danger' : ''}">${formatBytes(dataJsSize)}</span>
+      </div>
+      <div class="media-manager-stat">
+        <span class="media-manager-stat-label">GitHub 限制</span>
+        <span class="media-manager-stat-value">100 MB</span>
+      </div>
+    `;
+
+    if (!items.length) {
+      $('#media-manager-grid').innerHTML = '<div class="media-manager-empty">暂无媒体文件</div>';
+      return;
+    }
+
+    $('#media-manager-grid').innerHTML = items.map((m, rank) => {
+      const thumb = getImgSrc(m.img);
+      const sizeClass = m.size > 5 * 1024 * 1024 ? 'danger' : (m.size > 1 * 1024 * 1024 ? 'warning' : '');
+      const badge = m.type === 'pdf' ? '<div class="pdf-badge">PDF</div>' : (m.type === 'video' ? '<div class="video-badge">VIDEO</div>' : '');
+      return `
+        <div class="media-manager-item">
+          <div class="media-manager-item-thumb">
+            <img src="${thumb}" alt="" loading="lazy">
+            ${badge}
+            <button class="media-manager-item-delete" onclick="event.stopPropagation();App._deleteMediaItem('${m.projectId}', ${m.index})" title="删除">×</button>
+          </div>
+          <div class="media-manager-item-info">
+            <div class="media-manager-item-project">${esc(m.projectName)}</div>
+            <div class="media-manager-item-meta">
+              <span>#${m.index + 1} · ${m.type === 'image' ? '图片' : (m.type === 'pdf' ? 'PDF' : '视频')}</span>
+              <span class="media-manager-item-size ${sizeClass}">${formatFileSize(m.size)}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+  function estimateDataSize() {
+    // 粗略估算 data.js 体积（JSON 部分 + 包装字符）
+    try {
+      const json = JSON.stringify(data);
+      return json.length + 800;
+    } catch (e) {
+      return Infinity;
+    }
   }
 
   async function publishToGitHub() {
@@ -1354,6 +1534,30 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
 
       updatePublishProgress(10, '正在生成 data.js...');
       const content = generateDataJsContent(fullData);
+
+      // GitHub 单文件限制 100MB
+      const GITHUB_LIMIT = 100 * 1024 * 1024;
+      const size = new Blob([content]).size;
+      if (size > GITHUB_LIMIT) {
+        updatePublishProgress(100, `data.js 大小 ${formatBytes(size)}，超过 GitHub 100MB 限制`);
+        const panel = $('#publish-overlay').querySelector('.publish-panel');
+        panel.classList.add('error');
+        // 显示管理媒体按钮
+        let manageBtn = $('#publish-manage-media');
+        if (!manageBtn) {
+          manageBtn = document.createElement('button');
+          manageBtn.id = 'publish-manage-media';
+          manageBtn.className = 'btn btn-danger btn-sm';
+          manageBtn.style.marginTop = '16px';
+          manageBtn.textContent = '打开媒体管理器删除大文件';
+          manageBtn.onclick = () => { closePublishOverlay(); openMediaManager(); };
+          panel.appendChild(manageBtn);
+        }
+        manageBtn.style.display = 'inline-flex';
+        $('#publish-close').style.display = 'inline-flex';
+        toast(`data.js 体积 ${formatBytes(size)}，已超过 GitHub 100MB 限制，请删除部分图片后重试`, 'error');
+        return;
+      }
 
       updatePublishProgress(15, '正在连接本地发布服务...');
       const response = await fetch('http://127.0.0.1:9999/publish', {
@@ -1481,6 +1685,9 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
   function initModalEvents() {
     $('#project-modal').addEventListener('click', (e) => {
       if (e.target === $('#project-modal')) closeModal();
+    });
+    $('#media-manager-modal').addEventListener('click', (e) => {
+      if (e.target === $('#media-manager-modal')) closeMediaManager();
     });
     document.addEventListener('keydown', (e) => {
       const lb = $('#lightbox');
@@ -1690,6 +1897,7 @@ window.resumeData = ${JSON.stringify(fullData, null, 2)};
     addProject, editProject, deleteProject, viewProject, closeModal,
     addEducation, editEducation, deleteEducation,
     filterProjects, openLightbox, openProjectLightbox, openLightboxWithGallery, lightboxPrev, lightboxNext, closeLightbox, lightboxZoomIn, lightboxZoomOut, lightboxZoomReset, pdfPagePrev, pdfPageNext,
-    _saveEditModal, _triggerImageUpload, _removeEditImage,
+    openMediaManager, closeMediaManager, deleteTopMedia,
+    _saveEditModal, _triggerImageUpload, _removeEditImage, _deleteMediaItem: deleteMediaItem,
   };
 })();
