@@ -71,7 +71,7 @@ const server = http.createServer((req, res) => {
         await run('git add -A && git commit -m "publish: update portfolio data"');
 
         sendProgress(res, 80, '推送到 GitHub...');
-        await run('git push origin main');
+        await run('git push --force origin main');
 
         sendProgress(res, 100, '发布成功！约 1-2 分钟后网站更新。', true, true);
         res.end();
